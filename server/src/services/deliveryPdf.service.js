@@ -61,6 +61,7 @@ async function readSheetData(date, vehiclePrefixes, customerNames) {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
     range: 'A.採購明細總表!A:BN',
+    valueRenderOption: 'UNFORMATTED_VALUE',
   });
 
   const rows = (res.data.values || []).slice(1); // 跳過標題列
@@ -115,6 +116,47 @@ function groupByStop(rows) {
 // 從 groupByStop 的 key 中取出實際車次代碼（去掉客戶後綴）
 function vehicleFromKey(key) {
   return key.split(SEP)[0];
+}
+
+// ── PDF 渲染前驗算 ─────────────────────────────────────
+// 確保：來源貨款 ≈ 單價 × 數量，且與即將渲染的數值一致
+// no_price / yadong 無貨款欄，直接 pass
+function validateRows(templateType, rows, C, customer) {
+  let weightCol, priceCol, totalCol, label;
+  if (templateType === 'kg') {
+    weightCol = C.WEIGHT; priceCol = C.PRICE; totalCol = C.TOTAL;
+    label = '時價';
+  } else if (templateType === 'quoted' || templateType === 'alpha') {
+    weightCol = C.WEIGHT_CONV; priceCol = C.PRICE_QUOTE; totalCol = C.TOTAL_QUOTE;
+    label = '報價制';
+  } else {
+    return; // no_price / yadong — 無需驗算
+  }
+
+  const errors = [];
+  for (const row of rows) {
+    const product    = (row[C.PRODUCT] || '').trim();
+    const rawWeight  = parseFloat(String(row[weightCol] ?? '').replace(/,/g, ''));
+    const rawPrice   = parseFloat(String(row[priceCol]  ?? '').replace(/,/g, ''));
+    const total      = parseFloat(String(row[totalCol]  ?? '').replace(/,/g, ''));
+
+    if (isNaN(rawWeight) || isNaN(rawPrice) || isNaN(total)) continue; // 空白列跳過
+
+    // 複製試算表的計算機制：單價取小數1位、數量取小數2位，相乘後四捨五入至整數
+    const weight   = Math.round(rawWeight * 100) / 100;
+    const price    = Math.round(rawPrice  * 10)  / 10;
+    const expected = Math.round(weight * price);
+    const actual   = Math.round(total);
+
+    if (expected !== actual) {
+      errors.push(
+        `${product}：單價(${price}) × 數量(${weight}) = ${expected}，來源貨款 = ${actual}`
+      );
+    }
+  }
+
+  // 回傳錯誤陣列（空陣列代表通過）
+  return errors;
 }
 
 // 判斷模板類型
@@ -257,6 +299,7 @@ async function processDeliveryPdf(jobId, date, vehiclePrefixes, jobs, customerNa
     jobs[jobId].current = 0;
 
     const pdfBuffers = [];
+    const skipped    = []; // 驗算不過的客戶清單
     for (const [key, stopRows] of stops) {
       const vehicle      = vehicleFromKey(key);
       const templateType = getTemplateType(stopRows);
@@ -265,9 +308,26 @@ async function processDeliveryPdf(jobId, date, vehiclePrefixes, jobs, customerNa
         stopRows[0]?.[C.CUSTOMER] || ''
       ).trim();
 
+      const validationErrors = validateRows(templateType, stopRows, C, customer);
+      if (validationErrors.length > 0) {
+        skipped.push({ customer, errors: validationErrors });
+        jobs[jobId].current++;
+        continue; // 跳過此客戶，繼續處理其他人
+      }
+
       const html = renderHTML({ vehicle, customer, date, templateType, rows: stopRows, C });
       pdfBuffers.push(await renderPDF(html));
       jobs[jobId].current++;
+    }
+
+    if (pdfBuffers.length === 0) {
+      jobs[jobId] = {
+        status: 'error',
+        error:  `所有客戶均驗算不通過，PDF 未產生。\n` + skipped.map(s =>
+          `【${s.customer}】\n` + s.errors.map(e => `  ${e}`).join('\n')
+        ).join('\n'),
+      };
+      return;
     }
 
     jobs[jobId].status = 'merging';
@@ -281,10 +341,11 @@ async function processDeliveryPdf(jobId, date, vehiclePrefixes, jobs, customerNa
     jobs[jobId] = {
       status:          'done',
       driveUrl,
-      stopCount:       stops.length,
+      stopCount:       pdfBuffers.length,
       filename,
       vehicleSummary:  byCustomer ? '' : modeLabel,
       customerSummary: byCustomer ? modeLabel : '',
+      skipped:         skipped.length > 0 ? skipped : undefined,
     };
   } catch (err) {
     jobs[jobId] = { status: 'error', error: err.message };

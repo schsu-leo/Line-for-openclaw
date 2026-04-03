@@ -50,7 +50,7 @@ function fmtWeight(val) {
 
 // 格式化：單價 → $xx,xxx.x（小數1位 + 千分位 + $）
 function fmtPrice(val) {
-  const n = parseFloat(val);
+  const n = parseFloat(String(val).replace(/,/g, ''));
   if (isNaN(n) || val === '') return '';
   const [int, dec] = n.toFixed(1).split('.');
   return '$' + int.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + dec;
@@ -58,7 +58,7 @@ function fmtPrice(val) {
 
 // 格式化：貨款 → $xx,xxx（整數 + 千分位 + $）
 function fmtTotal(val) {
-  const n = parseFloat(val);
+  const n = parseFloat(String(val).replace(/,/g, ''));
   if (isNaN(n) || val === '') return '';
   return '$' + Math.round(n).toLocaleString();
 }
