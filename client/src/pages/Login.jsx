@@ -29,11 +29,9 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-white text-2xl font-bold">L</span>
-          </div>
+          <img src="/logo.png" alt="尚仁蔬果" className="h-20 mx-auto mb-4 object-contain" />
           <h1 className="text-xl font-semibold">LINE 智能客服系統</h1>
-          <p className="text-gray-500 text-sm mt-1">無毒農管理後台</p>
+          <p className="text-gray-500 text-sm mt-1">尚仁蔬果管理後台</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

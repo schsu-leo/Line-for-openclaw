@@ -1,11 +1,10 @@
 version: "3.8"
 
 services:
+  # ── LINE 智能客服 (Portal + CS backend) ──────────────────────────
   app:
     build: .
     restart: unless-stopped
-    ports:
-      - "${PORT:-3000}:3000"
     env_file:
       - server/.env
     environment:
@@ -22,7 +21,113 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    networks:
+      - internal
+      - coolify
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=coolify
 
+      # ── Auth routes (不改寫) ──
+      - traefik.http.routers.portal-auth.rule=Host(`app.shang-ren.com`) && PathPrefix(`/api/auth`)
+      - traefik.http.routers.portal-auth.entrypoints=https
+      - traefik.http.routers.portal-auth.tls=true
+      - traefik.http.routers.portal-auth.tls.certresolver=letsencrypt
+      - traefik.http.routers.portal-auth.service=portal-svc
+      - traefik.http.routers.portal-auth.priority=30
+
+      # ── LINE Webhook (不改寫) ──
+      - traefik.http.routers.portal-webhook.rule=Host(`app.shang-ren.com`) && PathPrefix(`/api/webhook`)
+      - traefik.http.routers.portal-webhook.entrypoints=https
+      - traefik.http.routers.portal-webhook.tls=true
+      - traefik.http.routers.portal-webhook.tls.certresolver=letsencrypt
+      - traefik.http.routers.portal-webhook.service=portal-svc
+      - traefik.http.routers.portal-webhook.priority=30
+
+      # ── Delivery PDF (不改寫) ──
+      - traefik.http.routers.portal-delivery.rule=Host(`app.shang-ren.com`) && PathPrefix(`/api/delivery-pdf`)
+      - traefik.http.routers.portal-delivery.entrypoints=https
+      - traefik.http.routers.portal-delivery.tls=true
+      - traefik.http.routers.portal-delivery.tls.certresolver=letsencrypt
+      - traefik.http.routers.portal-delivery.service=portal-svc
+      - traefik.http.routers.portal-delivery.priority=30
+
+      # ── Setup route (不改寫) ──
+      - traefik.http.routers.portal-setup.rule=Host(`app.shang-ren.com`) && PathPrefix(`/api/setup`)
+      - traefik.http.routers.portal-setup.entrypoints=https
+      - traefik.http.routers.portal-setup.tls=true
+      - traefik.http.routers.portal-setup.tls.certresolver=letsencrypt
+      - traefik.http.routers.portal-setup.service=portal-svc
+      - traefik.http.routers.portal-setup.priority=30
+
+      # ── CS API (/api/cs/* → /api/*) ──
+      - traefik.http.routers.portal-cs.rule=Host(`app.shang-ren.com`) && PathPrefix(`/api/cs`)
+      - traefik.http.routers.portal-cs.entrypoints=https
+      - traefik.http.routers.portal-cs.tls=true
+      - traefik.http.routers.portal-cs.tls.certresolver=letsencrypt
+      - traefik.http.routers.portal-cs.service=portal-svc
+      - traefik.http.routers.portal-cs.priority=20
+      - traefik.http.routers.portal-cs.middlewares=cs-strip
+      - traefik.http.middlewares.cs-strip.replacepathregex.regex=^/api/cs/(.*)
+      - traefik.http.middlewares.cs-strip.replacepathregex.replacement=/api/$$1
+
+      # ── Frontend SPA catch-all ──
+      - traefik.http.routers.portal-frontend.rule=Host(`app.shang-ren.com`)
+      - traefik.http.routers.portal-frontend.entrypoints=https
+      - traefik.http.routers.portal-frontend.tls=true
+      - traefik.http.routers.portal-frontend.tls.certresolver=letsencrypt
+      - traefik.http.routers.portal-frontend.service=portal-svc
+      - traefik.http.routers.portal-frontend.priority=1
+
+      # ── Service definition ──
+      - traefik.http.services.portal-svc.loadbalancer.server.port=3000
+
+      # ── 向後相容 admin.shang-ren.com ──
+      - traefik.http.routers.portal-legacy.rule=Host(`admin.shang-ren.com`)
+      - traefik.http.routers.portal-legacy.entrypoints=https
+      - traefik.http.routers.portal-legacy.tls=true
+      - traefik.http.routers.portal-legacy.tls.certresolver=letsencrypt
+      - traefik.http.routers.portal-legacy.middlewares=legacy-redirect
+      - traefik.http.middlewares.legacy-redirect.redirectregex.regex=^https://admin\.shang-ren\.com/(.*)
+      - traefik.http.middlewares.legacy-redirect.redirectregex.replacement=https://app.shang-ren.com/$${1}
+      - traefik.http.middlewares.legacy-redirect.redirectregex.permanent=true
+
+  # ── 月結請款 (FastAPI) ──────────────────────────────────────────
+  invoice:
+    build:
+      context: ../gas-monthly-invoice
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../gas-monthly-invoice/.env
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8080
+    volumes:
+      - invoice-output:/app/output
+      - ${DRIVE_TOKEN_PATH:-./credentials/drive_token.json}:/app/drive_token.json:ro
+      - ${GOOGLE_SA_KEY_PATH:-./credentials/google-sa.json}:/app/credentials/google-sa.json:ro
+    networks:
+      - internal
+      - coolify
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=coolify
+
+      # ── Invoice API (/api/inv/* → /*) ──
+      - traefik.http.routers.portal-inv.rule=Host(`app.shang-ren.com`) && PathPrefix(`/api/inv`)
+      - traefik.http.routers.portal-inv.entrypoints=https
+      - traefik.http.routers.portal-inv.tls=true
+      - traefik.http.routers.portal-inv.tls.certresolver=letsencrypt
+      - traefik.http.routers.portal-inv.service=invoice-svc
+      - traefik.http.routers.portal-inv.priority=20
+      - traefik.http.routers.portal-inv.middlewares=inv-strip
+      - traefik.http.middlewares.inv-strip.replacepathregex.regex=^/api/inv/(.*)
+      - traefik.http.middlewares.inv-strip.replacepathregex.replacement=/$$1
+
+      - traefik.http.services.invoice-svc.loadbalancer.server.port=8080
+
+  # ── PostgreSQL ──────────────────────────────────────────────────
   db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -37,7 +142,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - internal
 
 volumes:
   uploads:
   pgdata:
+  invoice-output:
+
+networks:
+  internal:
+  coolify:
+    external: true

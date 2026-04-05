@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
-import api from '../services/api';
+import api from '../modules/cs/api';
 import dayjs from 'dayjs';
 
 const COLORS = ['#00B900', '#e5e7eb'];

@@ -218,9 +218,7 @@ export default function Setup() {
           {/* Step 0: Welcome */}
           {currentStep === 0 && (
             <div className="text-center space-y-6">
-              <div className="w-20 h-20 bg-green-500 rounded-2xl flex items-center justify-center mx-auto">
-                <span className="text-white text-3xl font-bold">L</span>
-              </div>
+              <img src="/logo.png" alt="尚仁蔬果" className="h-20 mx-auto object-contain" />
               <div>
                 <h1 className="text-2xl font-bold text-gray-800">LINE 智能客服系統</h1>
                 <p className="text-gray-500 mt-2">歡迎使用！讓我們一步一步完成初始設定</p>

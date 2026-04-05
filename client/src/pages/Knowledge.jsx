@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import api from '../services/api';
+import api from '../modules/cs/api';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
 
@@ -208,7 +208,7 @@ export default function Knowledge() {
         ) : (
           <>
             <p className="font-medium text-gray-700">拖放檔案到此，或點擊上傳</p>
-            <p className="text-sm text-gray-500 mt-1">支援 PDF、DOCX、TXT、CSV（最大 50MB）</p>
+            <p className="text-sm text-gray-500 mt-1">支援 PDF、DOCX、TXT、CSV、JPG、PNG（最大 50MB）</p>
           </>
         )}
       </div>

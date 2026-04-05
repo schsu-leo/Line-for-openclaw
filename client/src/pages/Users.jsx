@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import api from '../modules/cs/api';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
 

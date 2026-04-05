@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import api from '../services/api';
+import api from '../modules/cs/api';
 import toast from 'react-hot-toast';
 
 const DAY_NAMES = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
@@ -65,6 +65,17 @@ export default function Schedules() {
     }
   };
 
+  const applyAlwaysOn = async () => {
+    if (!confirm('套用 Always On 將刪除所有現有時段規則，AI 將全天候回覆。確定繼續？')) return;
+    try {
+      await Promise.all(rules.map((r) => api.delete(`/schedules/${r.id}`)));
+      setRules([]);
+      toast.success('已套用 Always On — AI 將全天候回覆');
+    } catch {
+      toast.error('操作失敗');
+    }
+  };
+
   const applyTemplate = () => {
     const templates = [1, 2, 3, 4, 5].map((day) => ({
       day_of_week: day, start_time: '09:00', end_time: '18:00', is_enabled: true,
@@ -107,10 +118,10 @@ export default function Schedules() {
           <h2 className="font-medium">時段規則</h2>
           <div className="flex gap-2">
             <button
-              onClick={applyTemplate}
-              className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50"
+              onClick={applyAlwaysOn}
+              className="px-3 py-1.5 text-xs border border-green-400 text-green-700 rounded-lg hover:bg-green-50"
             >
-              套用週一~五 9-18 時
+              Always On
             </button>
             <button
               onClick={() => setShowForm(true)}

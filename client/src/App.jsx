@@ -1,28 +1,38 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Setup from './pages/Setup';
-import Dashboard from './pages/Dashboard';
-import Users from './pages/Users';
-import Messages from './pages/Messages';
-import Schedules from './pages/Schedules';
-import Knowledge from './pages/Knowledge';
-import Settings from './pages/Settings';
 import ChangePassword from './pages/ChangePassword';
+import PortalHome from './components/PortalHome';
 import api from './services/api';
 
-function PrivateRoute({ children }) {
+// Lazy-loaded modules
+const CSModule = lazy(() => import('./modules/cs'));
+const AttendanceModule = lazy(() => import('./modules/attendance'));
+const InvoiceModule = lazy(() => import('./modules/invoice'));
+
+// Admin pages (kept at portal level)
+const AdminAccounts = lazy(() => import('./pages/AdminAccounts'));
+
+const Loading = () => (
+  <div className="min-h-screen flex items-center justify-center">
+    <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
+  </div>
+);
+
+function PrivateRoute({ children, adminOnly = false, module: moduleName }) {
   const { user, loading } = useAuth();
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+  if (loading) return <Loading />;
   if (!user) return <Navigate to="/login" replace />;
   if (user.requiresPasswordChange) return <Navigate to="/change-password" replace />;
+  if (adminOnly && user.role !== 'admin') return <Navigate to="/" replace />;
+  if (moduleName && user.role !== 'admin') {
+    const userModules = user.modules || [];
+    if (!userModules.includes(moduleName)) return <Navigate to="/" replace />;
+  }
   return <Layout>{children}</Layout>;
 }
 
@@ -37,13 +47,8 @@ function DefaultRedirect() {
       .finally(() => setChecking(false));
   }, []);
 
-  if (checking) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
-
-  return <Navigate to={setupComplete ? '/dashboard' : '/setup'} replace />;
+  if (checking) return <Loading />;
+  return <Navigate to={setupComplete ? '/' : '/setup'} replace />;
 }
 
 export default function App() {
@@ -51,18 +56,33 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <Toaster position="top-right" />
-        <Routes>
-          <Route path="/setup" element={<Setup />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/change-password" element={<ChangePassword />} />
-          <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-          <Route path="/users" element={<PrivateRoute><Users /></PrivateRoute>} />
-          <Route path="/messages" element={<PrivateRoute><Messages /></PrivateRoute>} />
-          <Route path="/schedules" element={<PrivateRoute><Schedules /></PrivateRoute>} />
-          <Route path="/knowledge" element={<PrivateRoute><Knowledge /></PrivateRoute>} />
-          <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
-          <Route path="*" element={<DefaultRedirect />} />
-        </Routes>
+        <Suspense fallback={<Loading />}>
+          <Routes>
+            {/* Public */}
+            <Route path="/setup" element={<Setup />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/change-password" element={<ChangePassword />} />
+
+            {/* Portal Home */}
+            <Route path="/" element={<PrivateRoute><PortalHome /></PrivateRoute>} />
+
+            {/* CS Module */}
+            <Route path="/cs/*" element={<PrivateRoute module="cs"><CSModule /></PrivateRoute>} />
+
+            {/* Attendance Module */}
+            <Route path="/attendance/*" element={<PrivateRoute module="attendance"><AttendanceModule /></PrivateRoute>} />
+
+            {/* Invoice Module */}
+            <Route path="/invoice/*" element={<PrivateRoute module="invoice"><InvoiceModule /></PrivateRoute>} />
+
+            {/* Admin */}
+            <Route path="/admin/accounts" element={<PrivateRoute adminOnly><AdminAccounts /></PrivateRoute>} />
+
+            {/* Fallback */}
+            <Route path="/init" element={<DefaultRedirect />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
       </AuthProvider>
     </BrowserRouter>
   );

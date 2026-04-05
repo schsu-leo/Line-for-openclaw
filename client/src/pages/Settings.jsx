@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import api from '../services/api';
+import api from '../modules/cs/api';
 import toast from 'react-hot-toast';
 
 const LLM_PROVIDERS = [
@@ -168,7 +168,7 @@ export default function Settings() {
             type="text"
             value={settings.site_subtitle || ''}
             onChange={(e) => setSettings((prev) => ({ ...prev, site_subtitle: e.target.value }))}
-            placeholder="無毒農蝦"
+            placeholder="尚仁蔬果"
             className="input-field flex-1"
           />
           <SaveBtn onClick={() => updateSetting('site_subtitle', settings.site_subtitle)} saving={saving.site_subtitle} />
@@ -273,6 +273,22 @@ export default function Settings() {
             預設：每 5 分鐘最多 10 則 AI 回覆。超過則回覆「您發送訊息太頻繁」。
           </p>
         </div>
+        <div className="border-t pt-4 mt-2">
+          <p className="text-sm font-medium text-gray-700 mb-3">群組設定</p>
+          <Field label="群組觸發指令前綴">
+            <input
+              type="text"
+              value={settings.group_command_prefix ?? ''}
+              onChange={(e) => setSettings((prev) => ({ ...prev, group_command_prefix: e.target.value }))}
+              placeholder="留空 = 自動回覆所有群組訊息"
+              className="input-field flex-1"
+            />
+            <SaveBtn onClick={() => updateSetting('group_command_prefix', settings.group_command_prefix)} saving={saving.group_command_prefix} />
+          </Field>
+          <p className="text-xs text-gray-400 -mt-2">
+            Bot 加入群組後，只有訊息以此前綴開頭才會觸發 AI 回覆。<strong>留空</strong>則所有群組訊息都自動回覆。（例如：<code className="bg-gray-100 px-1 rounded">!問 退換貨政策是什麼？</code>）
+          </p>
+        </div>
       </Section>
 
       {/* LLM Settings */}
@@ -357,7 +373,7 @@ export default function Settings() {
           value={settings.system_prompt || ''}
           onChange={(e) => setSettings((prev) => ({ ...prev, system_prompt: e.target.value }))}
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-          placeholder="你是無毒農的智能客服助理..."
+          placeholder="你是尚仁蔬果的智能客服助理..."
         />
         <SaveBtn onClick={() => updateSetting('system_prompt', settings.system_prompt)} saving={saving.system_prompt} fullWidth />
       </Section>
@@ -592,7 +608,7 @@ function LineTutorial({ webhookUrl }) {
           <div className="bg-white border rounded p-2 space-y-1">
             <p>1. 點擊首頁的 <strong>「Create」</strong> 按鈕</p>
             <p>2. 選擇 <strong>「Create a new provider」</strong></p>
-            <p>3. 輸入名稱（例如：<code className="bg-gray-100 px-1 rounded">無毒農</code>）→ Create</p>
+            <p>3. 輸入名稱（例如：<code className="bg-gray-100 px-1 rounded">尚仁蔬果</code>）→ Create</p>
           </div>
           <p className="text-gray-400">若已有 Provider，直接點進去即可。</p>
         </TutorialStep>
@@ -606,7 +622,7 @@ function LineTutorial({ webhookUrl }) {
               <tbody>
                 <tr className="border-b"><td className="py-1 pr-2 font-medium w-32">Channel type</td><td>Messaging API</td></tr>
                 <tr className="border-b"><td className="py-1 pr-2 font-medium">Provider</td><td>選擇剛建立的 Provider</td></tr>
-                <tr className="border-b"><td className="py-1 pr-2 font-medium">Channel name</td><td>你的 Bot 顯示名稱（例如：無毒農智能客服）</td></tr>
+                <tr className="border-b"><td className="py-1 pr-2 font-medium">Channel name</td><td>你的 Bot 顯示名稱（例如：尚仁蔬果智能客服）</td></tr>
                 <tr className="border-b"><td className="py-1 pr-2 font-medium">Channel description</td><td>簡短描述</td></tr>
                 <tr className="border-b"><td className="py-1 pr-2 font-medium">Category</td><td>選擇最接近的行業分類</td></tr>
                 <tr><td className="py-1 pr-2 font-medium">Subcategory</td><td>選擇子分類</td></tr>
