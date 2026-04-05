@@ -1,0 +1,12 @@
+node_modules
+server/node_modules
+client/node_modules
+client/dist
+.env
+server/.env
+*.key
+*.pem
+.git
+.gitignore
+docs/
+*.md

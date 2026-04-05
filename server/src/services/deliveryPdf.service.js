@@ -4,7 +4,7 @@ const { PDFDocument } = require('pdf-lib');
 const { Readable } = require('stream');
 const { renderHTML } = require('./deliveryPdf.templates');
 
-const SPREADSHEET_ID = '1Am0Aobazouit64Zf6_gN-s2DNZoYRHod3KfMLF5AVP8';
+const SPREADSHEET_ID = process.env.DELIVERY_SPREADSHEET_ID || '1Am0Aobazouit64Zf6_gN-s2DNZoYRHod3KfMLF5AVP8';
 
 // 欄位索引 (0-based, A=0)
 const C = {
@@ -27,6 +27,16 @@ const C = {
   CUSTOMER_GROUP: 64, // BM 客戶總稱
 };
 
+// Google Sheets serial date → "M/D" 字串（UTC，處理日期儲存格以 UNFORMATTED_VALUE 回傳數字的情況）
+function serialToMD(serial) {
+  const d = new Date(Math.round((serial - 25569) * 86400 * 1000));
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
+}
+function normDateVal(val) {
+  if (typeof val === 'number') return serialToMD(val);
+  return String(val ?? '').trim();
+}
+
 // 忽略的特殊列（範本列/標記列）
 const SKIP_CUSTOMERS = new Set(['*複製用請勿刪除', ' 不要編輯', '測試車單']);
 const SKIP_VEHICLES  = new Set(['']);   // '日期錯誤' 不再跳過，可作為車次選項
@@ -41,7 +51,7 @@ function getAuth(scopes) {
 // OAuth2 client for Drive（用 gas-monthly-invoice 的 refresh token）
 function getDriveOAuth2() {
   const fs = require('fs');
-  const tokenPath = process.env.DRIVE_TOKEN_PATH || '/home/ubuntu/.credentials/drive_token.json';
+  const tokenPath = process.env.DRIVE_TOKEN_PATH || '/app/credentials/drive_token.json';
   const t = JSON.parse(fs.readFileSync(tokenPath, 'utf-8'));
   const client = new google.auth.OAuth2(t.client_id, t.client_secret);
   client.setCredentials({
@@ -55,11 +65,12 @@ function getDriveOAuth2() {
 // 讀取 A.採購明細總表 原始資料
 // vehiclePrefixes: string[] — 車次前綴陣列（依車次模式）
 // customerNames:   string[] — 客戶名稱陣列（依客戶模式，空陣列代表不用客戶篩選）
-async function readSheetData(date, vehiclePrefixes, customerNames) {
+async function readSheetData(date, vehiclePrefixes, customerNames, spreadsheetId) {
+  const sheetId = spreadsheetId || SPREADSHEET_ID;
   const auth = getAuth(['https://www.googleapis.com/auth/spreadsheets.readonly']);
   const sheets = google.sheets({ version: 'v4', auth });
   const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: SPREADSHEET_ID,
+    spreadsheetId: sheetId,
     range: 'A.採購明細總表!A:BN',
     valueRenderOption: 'UNFORMATTED_VALUE',
   });
@@ -68,7 +79,7 @@ async function readSheetData(date, vehiclePrefixes, customerNames) {
   const byCustomer = Array.isArray(customerNames) && customerNames.length > 0;
 
   return rows.filter(row => {
-    const rowDate     = (row[C.DATE]     || '').trim();
+    const rowDate     = normDateVal(row[C.DATE]);
     const rowVehicle  = (row[C.VEHICLE]  || '').trim();
     const rowCustomer = (row[C.CUSTOMER] || '').trim();
     const rowProduct  = (row[C.PRODUCT]  || '').trim();
@@ -222,11 +233,12 @@ async function uploadToDrive(buffer, filename) {
 
 // 取得下拉選單選項（日期 + 車次群組 + 客戶清單）
 // date: 若傳入則只回傳該日期的車次與客戶；否則回傳所有日期
-async function getDropdownOptions(date) {
+async function getDropdownOptions(date, spreadsheetId) {
+  const sheetId = spreadsheetId || SPREADSHEET_ID;
   const auth = getAuth(['https://www.googleapis.com/auth/spreadsheets.readonly']);
   const sheets = google.sheets({ version: 'v4', auth });
   const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: SPREADSHEET_ID,
+    spreadsheetId: sheetId,
     range: 'A.採購明細總表!B:M',  // B=日期(0), C=客戶(1), M=車次(11)
   });
 
@@ -266,10 +278,11 @@ async function getDropdownOptions(date) {
     return bm !== am ? am - bm : ad - bd;
   });
 
-  const sortedVehicles  = [
-    ...(vehicles.has('自送')    ? ['自送']    : []),
-    ...[...vehicles].filter(v => v !== '自送' && v !== '日期錯誤').sort(),
-    ...(vehicles.has('日期錯誤') ? ['日期錯誤'] : []),
+  // 中文開頭放前面（依第二碼起 localeCompare 排序），英文開頭放後面（A-Z）
+  const isChinese = v => /^[\u4e00-\u9fff]/.test(v);
+  const sortedVehicles = [
+    ...[...vehicles].filter(isChinese).sort((a, b) => a.slice(1).localeCompare(b.slice(1), 'zh-Hant')),
+    ...[...vehicles].filter(v => !isChinese(v)).sort(),
   ];
   const sortedCustomers = [...customers].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
 
@@ -278,10 +291,10 @@ async function getDropdownOptions(date) {
 
 // 主流程（背景執行）
 // vehiclePrefixes: string[]  customers: string[]
-async function processDeliveryPdf(jobId, date, vehiclePrefixes, jobs, customerNames) {
+async function processDeliveryPdf(jobId, date, vehiclePrefixes, jobs, customerNames, spreadsheetId) {
   try {
     jobs[jobId].status = 'reading';
-    const rows = await readSheetData(date, vehiclePrefixes || [], customerNames || []);
+    const rows = await readSheetData(date, vehiclePrefixes || [], customerNames || [], spreadsheetId);
 
     const byCustomer = Array.isArray(customerNames) && customerNames.length > 0;
     const modeLabel  = byCustomer
