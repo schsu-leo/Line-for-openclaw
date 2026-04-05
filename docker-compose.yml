@@ -1,7 +1,7 @@
 version: "3.8"
 
 services:
-  # ── LINE 智能客服 (Portal + CS backend) ──────────────────────────
+  # ── LINE 智能客服 (Portal frontend + CS backend) ────────────────
   app:
     build: .
     restart: unless-stopped
@@ -44,14 +44,6 @@ services:
       - traefik.http.routers.portal-webhook.service=portal-svc
       - traefik.http.routers.portal-webhook.priority=30
 
-      # ── Delivery PDF (不改寫) ──
-      - traefik.http.routers.portal-delivery.rule=Host(`app.shang-ren.com`) && PathPrefix(`/api/delivery-pdf`)
-      - traefik.http.routers.portal-delivery.entrypoints=https
-      - traefik.http.routers.portal-delivery.tls=true
-      - traefik.http.routers.portal-delivery.tls.certresolver=letsencrypt
-      - traefik.http.routers.portal-delivery.service=portal-svc
-      - traefik.http.routers.portal-delivery.priority=30
-
       # ── Setup route (不改寫) ──
       - traefik.http.routers.portal-setup.rule=Host(`app.shang-ren.com`) && PathPrefix(`/api/setup`)
       - traefik.http.routers.portal-setup.entrypoints=https
@@ -92,7 +84,7 @@ services:
       - traefik.http.middlewares.legacy-redirect.redirectregex.replacement=https://app.shang-ren.com/$${1}
       - traefik.http.middlewares.legacy-redirect.redirectregex.permanent=true
 
-  # ── 月結請款 (FastAPI) ──────────────────────────────────────────
+  # ── 月結請款 (FastAPI + Playwright) ─────────────────────────────
   invoice:
     build:
       context: ../gas-monthly-invoice
@@ -127,7 +119,95 @@ services:
 
       - traefik.http.services.invoice-svc.loadbalancer.server.port=8080
 
-  # ── PostgreSQL ──────────────────────────────────────────────────
+  # ── 出貨明細 PDF (Express + Playwright) ─────────────────────────
+  delivery:
+    build:
+      context: ../delivery-pdf-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - PORT=3002
+      - GOOGLE_SA_KEY_PATH=/app/credentials/google-sa.json
+      - DRIVE_TOKEN_PATH=/app/credentials/drive_token.json
+    volumes:
+      - ${GOOGLE_SA_KEY_PATH:-./credentials/google-sa.json}:/app/credentials/google-sa.json:ro
+      - ${DRIVE_TOKEN_PATH:-./credentials/drive_token.json}:/app/credentials/drive_token.json:ro
+    networks:
+      - internal
+      - coolify
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=coolify
+
+      # ── Delivery PDF API (不改寫，路徑已完整對應) ──
+      - traefik.http.routers.portal-delivery.rule=Host(`app.shang-ren.com`) && PathPrefix(`/api/delivery-pdf`)
+      - traefik.http.routers.portal-delivery.entrypoints=https
+      - traefik.http.routers.portal-delivery.tls=true
+      - traefik.http.routers.portal-delivery.tls.certresolver=letsencrypt
+      - traefik.http.routers.portal-delivery.service=delivery-svc
+      - traefik.http.routers.portal-delivery.priority=30
+
+      - traefik.http.services.delivery-svc.loadbalancer.server.port=3002
+
+  # ── 考勤系統 API (Express + Prisma) ─────────────────────────────
+  attendance:
+    build:
+      context: ../attendance-system/server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - PORT=3001
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-changeme}@db:5432/attendance
+      - JWT_SECRET=${ATT_JWT_SECRET:-changeme-att}
+      - PORTAL_JWT_SECRET=${PORTAL_JWT_SECRET:-changeme-portal}
+      - NODE_ENV=production
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+      - coolify
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=coolify
+
+      # ── Attendance API (/api/att/* → /api/*) ──
+      - traefik.http.routers.portal-att.rule=Host(`app.shang-ren.com`) && PathPrefix(`/api/att`)
+      - traefik.http.routers.portal-att.entrypoints=https
+      - traefik.http.routers.portal-att.tls=true
+      - traefik.http.routers.portal-att.tls.certresolver=letsencrypt
+      - traefik.http.routers.portal-att.service=attendance-svc
+      - traefik.http.routers.portal-att.priority=20
+      - traefik.http.routers.portal-att.middlewares=att-strip
+      - traefik.http.middlewares.att-strip.replacepathregex.regex=^/api/att/(.*)
+      - traefik.http.middlewares.att-strip.replacepathregex.replacement=/api/$$1
+
+      - traefik.http.services.attendance-svc.loadbalancer.server.port=3001
+
+  # ── 考勤系統前端 (nginx 靜態) ───────────────────────────────────
+  att-client:
+    build:
+      context: ../attendance-system/client
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks:
+      - internal
+      - coolify
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=coolify
+
+      # ── Attendance Frontend (/attendance/*) ──
+      - traefik.http.routers.portal-att-fe.rule=Host(`app.shang-ren.com`) && PathPrefix(`/attendance`)
+      - traefik.http.routers.portal-att-fe.entrypoints=https
+      - traefik.http.routers.portal-att-fe.tls=true
+      - traefik.http.routers.portal-att-fe.tls.certresolver=letsencrypt
+      - traefik.http.routers.portal-att-fe.service=att-client-svc
+      - traefik.http.routers.portal-att-fe.priority=10
+
+      - traefik.http.services.att-client-svc.loadbalancer.server.port=80
+
+  # ── PostgreSQL (line_cs + attendance) ───────────────────────────
   db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -137,6 +217,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-line_cs}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 10s

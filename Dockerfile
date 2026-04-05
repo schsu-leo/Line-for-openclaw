@@ -10,22 +10,11 @@ RUN npm run build
 # ── Stage 2: Production runtime ──
 FROM node:20-slim
 
-# Playwright 需要的系統套件（Chromium for deliveryPdf）
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
-    libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 \
-    libpango-1.0-0 libcairo2 libasound2 libxshmfence1 \
-    fonts-noto-cjk \
-    && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
 # 安裝 server 相依
 COPY server/package*.json ./server/
 RUN cd server && npm ci --omit=dev
-
-# 安裝 Playwright Chromium（deliveryPdf 出貨明細列印需要）
-RUN cd server && npx playwright install chromium
 
 # 複製 server 程式碼
 COPY server/ ./server/
