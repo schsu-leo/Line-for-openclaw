@@ -116,7 +116,7 @@ services:
       - traefik.http.routers.portal-inv.service=invoice-svc
       - traefik.http.routers.portal-inv.priority=20
       - traefik.http.routers.portal-inv.middlewares=inv-strip
-      - traefik.http.middlewares.inv-strip.replacepathregex.regex=^/api/inv/(.*)
+      - traefik.http.middlewares.inv-strip.replacepathregex.regex=^/api/inv/?(.*)
       - traefik.http.middlewares.inv-strip.replacepathregex.replacement=/$$1
 
       - traefik.http.services.invoice-svc.loadbalancer.server.port=8080
@@ -181,7 +181,7 @@ services:
       - traefik.http.routers.portal-att.service=attendance-svc
       - traefik.http.routers.portal-att.priority=20
       - traefik.http.routers.portal-att.middlewares=att-strip
-      - traefik.http.middlewares.att-strip.replacepathregex.regex=^/api/att/(.*)
+      - traefik.http.middlewares.att-strip.replacepathregex.regex=^/api/att/?(.*)
       - traefik.http.middlewares.att-strip.replacepathregex.replacement=/api/$$1
 
       - traefik.http.services.attendance-svc.loadbalancer.server.port=3001
