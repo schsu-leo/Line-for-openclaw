@@ -17,7 +17,7 @@ const modules = [
     name: '考勤管理',
     description: '打卡紀錄、排班管理、請假審核、薪資條',
     icon: '👥',
-    path: '/attendance',
+    path: '/m/attendance',
     color: 'bg-orange-50 border-orange-200 hover:border-orange-400',
     iconBg: 'bg-orange-100',
   },

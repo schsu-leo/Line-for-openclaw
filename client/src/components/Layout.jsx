@@ -19,17 +19,7 @@ const csNav = [
 ];
 
 const attendanceNav = [
-  { path: '/attendance', label: '總覽', icon: '📊', exact: true },
-  { path: '/attendance/employees', label: '員工管理', icon: '👥' },
-  { path: '/attendance/clock-records', label: '打卡紀錄', icon: '⏰' },
-  { path: '/attendance/shifts', label: '班別管理', icon: '📅' },
-  { path: '/attendance/schedules', label: '排班表', icon: '🗓️' },
-  { path: '/attendance/approvals', label: '簽核中心', icon: '✅' },
-  { path: '/attendance/leaves', label: '假勤總覽', icon: '🏖️' },
-  { path: '/attendance/reports', label: '月報表', icon: '📈' },
-  { path: '/attendance/onboard', label: '新人報到', icon: '🆕' },
-  { path: '/attendance/payslips', label: '薪資條', icon: '💰' },
-  { path: '/attendance/settings', label: '系統設定', icon: '⚙️', adminOnly: true },
+  { path: '/m/attendance', label: '考勤管理', icon: '📊', exact: true },
 ];
 
 const invoiceNav = [
@@ -109,9 +99,7 @@ export default function Layout({ children }) {
       <aside className="w-64 bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
         <div className="p-4 border-b border-gray-200">
           <button onClick={() => navigate('/')} className="flex items-center gap-2 w-full text-left">
-            <div className="h-8 w-8 bg-green-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
-              SR
-            </div>
+            <img src="/logo.png" alt="尚仁蔬果" className="h-8 w-8 rounded-lg object-contain" />
             <div>
               <p className="font-semibold text-sm">尚仁管理平台</p>
               <p className="text-xs text-gray-500">Shang Ren Portal</p>

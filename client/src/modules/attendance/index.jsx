@@ -2,10 +2,13 @@ import React from 'react';
 
 export default function AttendanceModule() {
   return (
-    <div className="p-6 text-center">
-      <div className="text-5xl mb-4">🚧</div>
-      <h2 className="text-xl font-semibold text-gray-700">考勤管理模組</h2>
-      <p className="text-gray-500 mt-2">整合中，敬請期待</p>
+    <div className="w-full h-full -m-6">
+      <iframe
+        src="/attendance/dashboard"
+        title="考勤管理"
+        className="w-full h-full border-0"
+        style={{ minHeight: 'calc(100vh - 64px)' }}
+      />
     </div>
   );
 }

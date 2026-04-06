@@ -30,8 +30,8 @@ export default function Login() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 w-full max-w-md">
         <div className="text-center mb-8">
           <img src="/logo.png" alt="尚仁蔬果" className="h-20 mx-auto mb-4 object-contain" />
-          <h1 className="text-xl font-semibold">LINE 智能客服系統</h1>
-          <p className="text-gray-500 text-sm mt-1">尚仁蔬果管理後台</p>
+          <h1 className="text-xl font-semibold">尚仁蔬果系統 Portal</h1>
+          <p className="text-gray-500 text-sm mt-1">管理後台登錄</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -65,6 +65,16 @@ export default function Login() {
             {loading ? '登入中...' : '登入'}
           </button>
         </form>
+
+        <div className="text-center mt-4">
+          <button
+            type="button"
+            onClick={() => toast('請聯繫系統管理員重設密碼', { icon: 'ℹ️' })}
+            className="text-sm text-green-600 hover:text-green-700 hover:underline"
+          >
+            忘記密碼？
+          </button>
+        </div>
       </div>
     </div>
   );

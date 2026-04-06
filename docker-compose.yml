@@ -95,6 +95,8 @@ services:
     environment:
       - HOST=0.0.0.0
       - PORT=8080
+      - PORTAL_JWT_SECRET=${PORTAL_JWT_SECRET:-changeme-portal}
+      - BASE_PATH=/api/inv
     volumes:
       - invoice-output:/app/output
       - ${DRIVE_TOKEN_PATH:-./credentials/drive_token.json}:/app/drive_token.json:ro

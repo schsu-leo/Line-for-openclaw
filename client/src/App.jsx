@@ -70,7 +70,7 @@ export default function App() {
             <Route path="/cs/*" element={<PrivateRoute module="cs"><CSModule /></PrivateRoute>} />
 
             {/* Attendance Module */}
-            <Route path="/attendance/*" element={<PrivateRoute module="attendance"><AttendanceModule /></PrivateRoute>} />
+            <Route path="/m/attendance/*" element={<PrivateRoute module="attendance"><AttendanceModule /></PrivateRoute>} />
 
             {/* Invoice Module */}
             <Route path="/invoice/*" element={<PrivateRoute module="invoice"><InvoiceModule /></PrivateRoute>} />
