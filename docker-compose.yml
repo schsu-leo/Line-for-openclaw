@@ -215,6 +215,34 @@ services:
 
       - traefik.http.services.att-client-svc.loadbalancer.server.port=80
 
+  # ── NocoDB (統一資料庫管理介面) ──────────────────────────────────
+  nocodb:
+    image: nocodb/nocodb:latest
+    restart: unless-stopped
+    environment:
+      - NC_DB=pg://db:5432?u=${POSTGRES_USER:-postgres}&p=${POSTGRES_PASSWORD:-changeme}&d=nocodb_meta
+      - NC_AUTH_JWT_SECRET=${NOCODB_JWT_SECRET:-changeme-nocodb}
+    volumes:
+      - nocodb-data:/usr/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+      - coolify
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=coolify
+
+      # ── NocoDB UI (db.shang-ren.com) ──
+      - traefik.http.routers.nocodb.rule=Host(`db.shang-ren.com`)
+      - traefik.http.routers.nocodb.entrypoints=https
+      - traefik.http.routers.nocodb.tls=true
+      - traefik.http.routers.nocodb.tls.certresolver=letsencrypt
+      - traefik.http.routers.nocodb.service=nocodb-svc
+
+      - traefik.http.services.nocodb-svc.loadbalancer.server.port=8080
+
   # ── PostgreSQL (line_cs + attendance) ───────────────────────────
   db:
     image: postgres:16-alpine
@@ -238,6 +266,7 @@ volumes:
   uploads:
   pgdata:
   invoice-output:
+  nocodb-data:
 
 networks:
   internal:
