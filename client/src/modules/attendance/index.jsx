@@ -5,7 +5,7 @@ export default function AttendanceModule() {
   const iframeSrc = `/attendance/dashboard?portal_token=${encodeURIComponent(token || '')}`;
 
   return (
-    <div className="w-full h-full -m-6">
+    <div className="w-full h-full -mx-6 -mb-6">
       <iframe
         src={iframeSrc}
         title="考勤管理"
