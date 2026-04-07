@@ -107,6 +107,7 @@ app.use('/api/reports', require('./routes/reports.routes'));
 app.use('/api/line-groups', require('./routes/lineGroups.routes'));
 app.use('/api/broadcast', require('./routes/broadcast.routes'));
 app.use('/api/shipments', require('./routes/shipments.routes'));
+app.use('/api/credit-notes', require('./routes/creditNotes.routes'));
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
