@@ -24,5 +24,6 @@ exports.up = async function (knex) {
 };
 
 exports.down = async function (knex) {
+  await knex.schema.raw('DROP INDEX IF EXISTS idx_shipment_items_shipment_id');
   await knex.schema.dropTableIfExists('shipment_items');
 };
