@@ -14,6 +14,7 @@ async function batchCreate(req, res, next) {
   const trx = await db.transaction();
   try {
     const shipmentIds = [];
+    const createdSet = new Set();
 
     for (const item of items) {
       const { customer_id, customer_name, vehicle, products } = item;
@@ -50,6 +51,7 @@ async function batchCreate(req, res, next) {
           })
           .returning('*');
         shipment = newShipment;
+        createdSet.add(newShipment.id);
       }
 
       // 寫入品項
@@ -75,7 +77,7 @@ async function batchCreate(req, res, next) {
     }
 
     await trx.commit();
-    res.json({ created: shipmentIds.length, shipment_ids: [...new Set(shipmentIds)] });
+    res.json({ created: createdSet.size, shipment_ids: [...new Set(shipmentIds)] });
   } catch (err) {
     await trx.rollback();
     next(err);
