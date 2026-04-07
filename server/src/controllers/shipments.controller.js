@@ -96,8 +96,40 @@ async function list(req, res, next) {
  * POST /api/shipments/:id/returns
  */
 async function addReturn(req, res, next) {
-  // 實作於 Task 3
-  res.status(501).json({ error: 'Not implemented' });
+  const { id } = req.params;
+  const { product_name, unit, qty, unit_price, amount, notes } = req.body;
+
+  if (!product_name || !unit) {
+    return res.status(400).json({ error: 'product_name 和 unit 為必填' });
+  }
+
+  try {
+    const shipment = await db('shipments').where({ id }).first();
+    if (!shipment) return res.status(404).json({ error: '找不到出貨單' });
+    if (shipment.status === 'invoiced') {
+      return res.status(403).json({
+        error: '此出貨單已開立發票，請款前退貨需先作廢發票',
+      });
+    }
+
+    const [item] = await db('shipment_items')
+      .insert({
+        shipment_id: parseInt(id),
+        type: 'return',
+        product_name,
+        unit,
+        qty: qty ? -Math.abs(parseFloat(qty)) : null,
+        unit_price: unit_price || null,
+        amount: amount ? -Math.abs(parseFloat(amount)) : null,
+        notes: notes || null,
+        created_at: new Date(),
+      })
+      .returning('*');
+
+    res.status(201).json(item);
+  } catch (err) {
+    next(err);
+  }
 }
 
 /**
