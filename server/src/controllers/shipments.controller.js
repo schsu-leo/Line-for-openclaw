@@ -136,16 +136,75 @@ async function addReturn(req, res, next) {
  * POST /api/shipments/:id/invoice
  */
 async function lockInvoice(req, res, next) {
-  // 實作於 Task 4
-  res.status(501).json({ error: 'Not implemented' });
+  const { id } = req.params;
+  const { invoice_no, invoice_date, invoice_amount } = req.body;
+
+  if (!invoice_no || !invoice_date || invoice_amount == null) {
+    return res.status(400).json({ error: 'invoice_no, invoice_date, invoice_amount 為必填' });
+  }
+
+  try {
+    const shipment = await db('shipments').where({ id }).first();
+    if (!shipment) return res.status(404).json({ error: '找不到出貨單' });
+    if (shipment.status === 'invoiced') {
+      return res.status(409).json({ error: '此出貨單已開立發票' });
+    }
+
+    const [updated] = await db('shipments')
+      .where({ id })
+      .update({
+        status: 'invoiced',
+        invoice_no,
+        invoice_date,
+        invoice_amount: parseFloat(invoice_amount),
+        locked_at: new Date(),
+        updated_at: new Date(),
+      })
+      .returning('*');
+
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
 }
 
 /**
  * POST /api/shipments/:id/void-invoice
  */
 async function voidInvoice(req, res, next) {
-  // 實作於 Task 4
-  res.status(501).json({ error: 'Not implemented' });
+  const { id } = req.params;
+  const { void_reason } = req.body;
+
+  if (!void_reason || void_reason.trim() === '') {
+    return res.status(400).json({ error: 'void_reason 為必填' });
+  }
+
+  try {
+    const shipment = await db('shipments').where({ id }).first();
+    if (!shipment) return res.status(404).json({ error: '找不到出貨單' });
+    if (shipment.status !== 'invoiced') {
+      return res.status(409).json({ error: '只有 invoiced 狀態的出貨單可以作廢' });
+    }
+
+    const [updated] = await db('shipments')
+      .where({ id })
+      .update({
+        status: 'shipped',
+        voided_at: new Date(),
+        void_reason: void_reason.trim(),
+        original_invoice_no: shipment.invoice_no,
+        invoice_no: null,
+        invoice_date: null,
+        invoice_amount: null,
+        locked_at: null,
+        updated_at: new Date(),
+      })
+      .returning('*');
+
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
 }
 
 module.exports = { batchCreate, list, addReturn, lockInvoice, voidInvoice };
