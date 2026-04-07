@@ -88,8 +88,40 @@ async function batchCreate(req, res, next) {
  * GET /api/shipments
  */
 async function list(req, res, next) {
-  // 實作於 Task 5
-  res.json({ shipments: [] });
+  const { customer_id, date_from, date_to, status, include_items } = req.query;
+
+  try {
+    let query = db('shipments').orderBy('date', 'desc').orderBy('id', 'desc');
+
+    if (customer_id) query = query.where('customer_id', parseInt(customer_id));
+    if (date_from)   query = query.where('date', '>=', date_from);
+    if (date_to)     query = query.where('date', '<=', date_to);
+    if (status)      query = query.where('status', status);
+
+    const shipments = await query.select('*');
+
+    if (include_items === 'true' && shipments.length > 0) {
+      const ids = shipments.map((s) => s.id);
+      const items = await db('shipment_items').whereIn('shipment_id', ids);
+
+      const itemsMap = {};
+      items.forEach((item) => {
+        if (!itemsMap[item.shipment_id]) itemsMap[item.shipment_id] = [];
+        itemsMap[item.shipment_id].push(item);
+      });
+
+      return res.json({
+        shipments: shipments.map((s) => ({
+          ...s,
+          items: itemsMap[s.id] || [],
+        })),
+      });
+    }
+
+    res.json({ shipments });
+  } catch (err) {
+    next(err);
+  }
 }
 
 /**
