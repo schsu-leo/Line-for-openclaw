@@ -219,8 +219,13 @@ services:
   nocodb:
     image: nocodb/nocodb:latest
     restart: unless-stopped
+    # Patch request-filtering-agent to allow Docker internal network (SSRF bypass for self-hosted)
+    entrypoint:
+      - sh
+      - -c
+      - "sed -i 's/allowPrivateIPAddress: false/allowPrivateIPAddress: true/' /usr/src/app/node_modules/request-filtering-agent/lib/request-filtering-agent.js 2>/dev/null || true && exec /usr/bin/dumb-init -- /usr/src/appEntry/start.sh"
     environment:
-      - NC_DB=pg://db:5432?u=${POSTGRES_USER:-postgres}&p=${POSTGRES_PASSWORD:-changeme}&d=nocodb_meta
+      - NC_DB=pg://db:5432?u=${POSTGRES_USER:-postgres}&p=${POSTGRES_PASSWORD:-changeme}&d=${POSTGRES_DB:-line_cs}
       - NC_AUTH_JWT_SECRET=${NOCODB_JWT_SECRET:-changeme-nocodb}
     volumes:
       - nocodb-data:/usr/app/data
