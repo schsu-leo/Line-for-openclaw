@@ -23,11 +23,16 @@ const fs = require('fs');
 const logger = require('./config/logger');
 const errorHandler = require('./middleware/errorHandler');
 const { loginLimiter, registerLimiter } = require('./middleware/loginRateLimit');
+const cron = require('node-cron');
+const { generateReport } = require('./services/report.service');
 
 // Ensure upload directories exist
 fs.mkdirSync(path.join(__dirname, '../uploads/knowledge'), { recursive: true });
 
 const app = express();
+
+// Trust first proxy (Traefik) for correct IP in rate-limiter & logs
+app.set('trust proxy', 1);
 
 // Security headers
 app.use(helmet({
@@ -98,6 +103,9 @@ app.use('/api/messages', require('./routes/messages.routes'));
 app.use('/api/schedules', require('./routes/schedules.routes'));
 app.use('/api/settings', require('./routes/settings.routes'));
 app.use('/api/files', require('./routes/files.routes'));
+app.use('/api/reports', require('./routes/reports.routes'));
+app.use('/api/line-groups', require('./routes/lineGroups.routes'));
+app.use('/api/broadcast', require('./routes/broadcast.routes'));
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
@@ -121,6 +129,12 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   logger.info(`Server running on port ${PORT}`);
+
+  // Generate message report every hour (at :00 of every hour)
+  cron.schedule('0 * * * *', () => {
+    generateReport().catch((err) => logger.logError('[Cron] Report generation error', err));
+  });
+  logger.info('[Cron] Message report scheduler started (every hour)');
 });
 
 module.exports = app;
