@@ -79,7 +79,7 @@ async function batchCreate(req, res, next) {
     await trx.commit();
     res.json({ created: createdSet.size, shipment_ids: [...new Set(shipmentIds)] });
   } catch (err) {
-    await trx.rollback();
+    try { await trx.rollback(); } catch (_) {}
     next(err);
   }
 }
