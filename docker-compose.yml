@@ -97,9 +97,12 @@ services:
       - PORT=8080
       - PORTAL_JWT_SECRET=${PORTAL_JWT_SECRET:-changeme-portal}
       - BASE_PATH=/api/inv
+      - LINE_BRIDGE_URL=http://host.docker.internal:9223
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - invoice-output:/app/output
-      - ${DRIVE_TOKEN_PATH:-./credentials/drive_token.json}:/app/drive_token.json:ro
+      - ${DRIVE_TOKEN_PATH:-./credentials/drive_token.json}:/app/drive_token.json
       - ${GOOGLE_SA_KEY_PATH:-./credentials/google-sa.json}:/app/credentials/google-sa.json:ro
     networks:
       - internal
@@ -159,9 +162,10 @@ services:
     restart: unless-stopped
     environment:
       - PORT=3001
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-changeme}@db:5432/attendance
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-changeme}@db:5432/line_cs
       - JWT_SECRET=${ATT_JWT_SECRET:-changeme-att}
       - PORTAL_JWT_SECRET=${PORTAL_JWT_SECRET:-changeme-portal}
+      - LINE_LIFF_ID=2009561373-EUy47Hcq
       - NODE_ENV=production
     depends_on:
       db:
@@ -191,6 +195,8 @@ services:
     build:
       context: ../attendance-system/client
       dockerfile: Dockerfile
+      args:
+        VITE_LIFF_ID: "2009561373-EUy47Hcq"
     restart: unless-stopped
     networks:
       - internal
