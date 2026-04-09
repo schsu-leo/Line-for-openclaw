@@ -1,206 +1,259 @@
+// LINE智能客服/server/src/controllers/auth.controller.js
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 const logger = require('../config/logger');
 
-async function register(req, res, next) {
-  try {
-    const { email, password, name } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
-    }
+// T4: Refresh Token 工具函式
+function generateRefreshToken() {
+  return crypto.randomBytes(48).toString('hex');
+}
 
-    const existing = await db('users').where({ email }).first();
-    if (existing) {
-      return res.status(409).json({ error: 'Email already registered' });
-    }
+async function saveRefreshToken(employeeId, rawToken) {
+  const hash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 天
+  await db('refresh_tokens').insert({ employee_id: employeeId, token_hash: hash, expires_at: expiresAt });
+  return rawToken;
+}
 
-    const password_hash = await bcrypt.hash(password, 10);
-    const [user] = await db('users').insert({ email, password_hash, name }).returning(['id', 'email', 'name', 'role', 'employee_no', 'modules', 'created_at']);
+// 從 employees 記錄產生 JWT
+function signEmployeeToken(emp) {
+  return jwt.sign(
+    {
+      id: emp.id,           // UUID string
+      email: emp.email,
+      name: emp.name,
+      roles: emp.roles || [],
+      employeeNo: emp.employee_no || null,
+      modules: emp.modules || [],
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: '2h' }
+  );
+}
 
-    const token = jwt.sign({ id: user.id, email: user.email, name: user.name, role: user.role, employeeNo: user.employee_no || null, modules: user.modules || [] }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    res.status(201).json({ user, token });
-  } catch (err) {
-    next(err);
-  }
+// 從 employees 欄位組裝前端回傳格式
+function formatEmployee(emp, deptName) {
+  return {
+    id: emp.id,
+    email: emp.email,
+    name: emp.name,
+    roles: emp.roles || [],
+    employeeNo: emp.employee_no || null,
+    modules: emp.modules || [],
+    department: deptName || null,
+    requiresPasswordChange: !!emp.requires_password_change,
+    isActive: emp.is_active,
+    createdAt: emp.created_at,
+  };
 }
 
 async function login(req, res, next) {
   try {
     const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
-    }
+    if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
 
-    const user = await db('users').where({ email }).first();
-    if (!user) {
-      logger.warn(`Login failed (unknown email): ip=${req.ip}, email=${email}`);
+    const emp = await db('employees').where({ email }).first();
+    if (!emp) {
+      logger.warn(`Login failed (unknown email): ip=${req.ip}`);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-
-    const valid = await bcrypt.compare(password, user.password_hash);
+    // P1-2: 停用帳號不可登入
+    if (!emp.is_active) {
+      logger.warn(`Login failed (inactive account): email=${email} ip=${req.ip}`);
+      return res.status(403).json({ error: '帳號已停用，請聯繫管理員' });
+    }
+    const valid = await bcrypt.compare(password, emp.password_hash);
     if (!valid) {
-      logger.warn(`Login failed (wrong password): ip=${req.ip}, email=${email}`);
+      logger.warn(`Login failed (wrong password): ip=${req.ip}`);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const token = jwt.sign({ id: user.id, email: user.email, name: user.name, role: user.role, employeeNo: user.employee_no || null, modules: user.modules || [] }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    res.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role || 'admin',
-        employeeNo: user.employee_no || null,
-        modules: user.modules || [],
-        requiresPasswordChange: !!user.requires_password_change,
-      },
-      token,
-    });
-  } catch (err) {
-    next(err);
-  }
+    const dept = emp.department_id
+      ? await db('departments').where({ id: emp.department_id }).select('name').first()
+      : null;
+
+    const token = signEmployeeToken(emp);
+    // T4: 建立 refresh token 並存入 HttpOnly cookie
+    const refreshToken = await saveRefreshToken(emp.id, generateRefreshToken());
+    res
+      .cookie('refresh_token', refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        path: '/api/auth/refresh',
+      })
+      .json({ user: formatEmployee(emp, dept?.name), token });
+  } catch (err) { next(err); }
 }
 
 async function me(req, res, next) {
   try {
-    const user = await db('users').where({ id: req.user.id }).select('id', 'email', 'name', 'role', 'employee_no', 'modules', 'requires_password_change', 'created_at').first();
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role || 'admin',
-      employeeNo: user.employee_no || null,
-      modules: user.modules || [],
-      requiresPasswordChange: !!user.requires_password_change,
-      created_at: user.created_at,
-    });
-  } catch (err) {
-    next(err);
-  }
+    const emp = await db('employees').where({ id: req.user.id }).first();
+    if (!emp) return res.status(404).json({ error: 'User not found' });
+    const dept = emp.department_id
+      ? await db('departments').where({ id: emp.department_id }).select('name').first()
+      : null;
+    res.json(formatEmployee(emp, dept?.name));
+  } catch (err) { next(err); }
 }
 
 async function changePassword(req, res, next) {
   try {
     const { currentPassword, newPassword } = req.body;
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: '請輸入目前密碼和新密碼' });
-    }
-    if (newPassword.length < 8) {
-      return res.status(400).json({ error: '新密碼至少需要 8 個字元' });
-    }
+    if (!currentPassword || !newPassword) return res.status(400).json({ error: '請輸入目前密碼和新密碼' });
+    if (newPassword.length < 8) return res.status(400).json({ error: '新密碼至少需要 8 個字元' });
 
-    const user = await db('users').where({ id: req.user.id }).first();
-    if (!user) {
-      return res.status(404).json({ error: '找不到使用者' });
-    }
+    const emp = await db('employees').where({ id: req.user.id }).first();
+    if (!emp) return res.status(404).json({ error: '找不到使用者' });
 
-    const valid = await bcrypt.compare(currentPassword, user.password_hash);
-    if (!valid) {
-      return res.status(401).json({ error: '目前密碼不正確' });
-    }
+    const valid = await bcrypt.compare(currentPassword, emp.password_hash);
+    if (!valid) return res.status(401).json({ error: '目前密碼不正確' });
 
     const password_hash = await bcrypt.hash(newPassword, 10);
-    await db('users').where({ id: req.user.id }).update({
+    await db('employees').where({ id: req.user.id }).update({
       password_hash,
       requires_password_change: false,
       updated_at: new Date(),
     });
-
     res.json({ success: true, message: '密碼已更新' });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 }
 
 async function listAdmins(req, res, next) {
   try {
-    const users = await db('users').select('id', 'email', 'name', 'role', 'employee_no', 'modules', 'is_active', 'created_at').orderBy('created_at', 'asc');
-    res.json(users);
-  } catch (err) {
-    next(err);
-  }
+    const emps = await db('employees')
+      .leftJoin('departments', 'employees.department_id', 'departments.id')
+      .select(
+        'employees.id', 'employees.email', 'employees.name', 'employees.roles',
+        'employees.employee_no', 'employees.modules', 'employees.is_active',
+        'employees.created_at', 'employees.requires_password_change',
+        db.raw("departments.name as department")
+      )
+      .orderBy('employees.created_at', 'asc');
+    res.json(emps.map(emp => formatEmployee(emp, emp.department)));
+  } catch (err) { next(err); }
 }
 
-const VALID_ROLES = ['admin', 'manager', 'staff'];
+const VALID_ROLES = ['admin', 'manager', 'employee'];
 
 async function createAdmin(req, res, next) {
   try {
-    const { email, password, name, role = 'staff', employee_no, modules } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email 和密碼為必填' });
-    }
-    if (password.length < 8) {
-      return res.status(400).json({ error: '密碼至少需要 8 個字元' });
-    }
-    if (!VALID_ROLES.includes(role)) {
-      return res.status(400).json({ error: '無效的角色' });
-    }
-    const existing = await db('users').where({ email }).first();
-    if (existing) {
-      return res.status(409).json({ error: '此 Email 已被使用' });
-    }
+    const { email, password, name, role = 'employee', modules } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email 和密碼為必填' });
+    if (password.length < 8) return res.status(400).json({ error: '密碼至少需要 8 個字元' });
+    if (!VALID_ROLES.includes(role)) return res.status(400).json({ error: '無效的角色' });
+
+    const existing = await db('employees').where({ email }).first();
+    if (existing) return res.status(409).json({ error: '此 Email 已被使用' });
+
     const password_hash = await bcrypt.hash(password, 10);
-    const insertData = { email, password_hash, name, role, requires_password_change: true };
-    if (employee_no) insertData.employee_no = employee_no;
-    if (modules) insertData.modules = modules;
-    const [user] = await db('users')
-      .insert(insertData)
-      .returning(['id', 'email', 'name', 'role', 'employee_no', 'modules', 'created_at']);
-    res.status(201).json(user);
-  } catch (err) {
-    next(err);
-  }
+    const id = require('crypto').randomUUID();
+
+    await db('employees').insert({
+      id,
+      email,
+      password_hash,
+      name,
+      roles: [role],
+      modules: modules || [],
+      requires_password_change: true,
+      is_active: true,
+      employment_type: 'full_time',
+      onboard_status: 'approved',
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
+    const emp = await db('employees').where({ id }).first();
+    res.status(201).json(formatEmployee(emp, null));
+  } catch (err) { next(err); }
 }
 
 async function deleteAdmin(req, res, next) {
   try {
     const { id } = req.params;
-    if (parseInt(id) === req.user.id) {
-      return res.status(400).json({ error: '不能刪除自己的帳號' });
-    }
-    const deleted = await db('users').where({ id }).del();
+    if (id === req.user.id) return res.status(400).json({ error: '不能刪除自己的帳號' });
+    const deleted = await db('employees').where({ id }).del();
     if (!deleted) return res.status(404).json({ error: '找不到此帳號' });
     res.json({ success: true });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 }
 
 async function resetAdminPassword(req, res, next) {
   try {
     const { id } = req.params;
     const { newPassword } = req.body;
-    if (!newPassword || newPassword.length < 8) {
-      return res.status(400).json({ error: '新密碼至少需要 8 個字元' });
-    }
-    const user = await db('users').where({ id }).first();
-    if (!user) return res.status(404).json({ error: '找不到此帳號' });
+    if (!newPassword || newPassword.length < 8) return res.status(400).json({ error: '新密碼至少需要 8 個字元' });
+    const emp = await db('employees').where({ id }).first();
+    if (!emp) return res.status(404).json({ error: '找不到此帳號' });
     const password_hash = await bcrypt.hash(newPassword, 10);
-    await db('users').where({ id }).update({ password_hash, requires_password_change: true, updated_at: new Date() });
+    await db('employees').where({ id }).update({ password_hash, requires_password_change: true, updated_at: new Date() });
     res.json({ success: true });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 }
 
 async function updateAdminRole(req, res, next) {
   try {
     const { id } = req.params;
     const { role } = req.body;
-    if (!VALID_ROLES.includes(role)) {
-      return res.status(400).json({ error: '無效的角色' });
-    }
-    if (parseInt(id) === req.user.id) {
-      return res.status(400).json({ error: '不能修改自己的角色' });
-    }
-    const updated = await db('users').where({ id }).update({ role, updated_at: new Date() });
+    if (!VALID_ROLES.includes(role)) return res.status(400).json({ error: '無效的角色' });
+    if (id === req.user.id) return res.status(400).json({ error: '不能修改自己的角色' });
+    const updated = await db('employees').where({ id }).update({
+      roles: [role],
+      updated_at: new Date(),
+    });
     if (!updated) return res.status(404).json({ error: '找不到此帳號' });
     res.json({ success: true });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 }
 
-module.exports = { register, login, me, changePassword, listAdmins, createAdmin, deleteAdmin, resetAdminPassword, updateAdminRole };
+async function updateAdminModules(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { modules } = req.body;
+    if (!Array.isArray(modules)) return res.status(400).json({ error: 'modules 必須是陣列' });
+    const updated = await db('employees').where({ id }).update({
+      modules,
+      updated_at: new Date(),
+    });
+    if (!updated) return res.status(404).json({ error: '找不到此帳號' });
+    res.json({ success: true });
+  } catch (err) { next(err); }
+}
+
+// T4: Refresh Token — 用 HttpOnly cookie 中的 refresh token 換發新 access token
+async function refreshToken(req, res, next) {
+  try {
+    const rawToken = req.cookies?.refresh_token;
+    if (!rawToken) return res.status(401).json({ error: 'No refresh token' });
+    const hash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const record = await db('refresh_tokens')
+      .where({ token_hash: hash, revoked: false })
+      .where('expires_at', '>', new Date())
+      .first();
+    if (!record) return res.status(401).json({ error: 'Invalid or expired refresh token' });
+    const emp = await db('employees').where({ id: record.employee_id }).first();
+    if (!emp) return res.status(401).json({ error: 'User not found' });
+    if (!emp.is_active) return res.status(403).json({ error: '帳號已停用' });
+    const token = signEmployeeToken(emp);
+    res.json({ token });
+  } catch (err) { next(err); }
+}
+
+// T4: Logout — 撤銷 refresh token
+async function logout(req, res, next) {
+  try {
+    const rawToken = req.cookies?.refresh_token;
+    if (rawToken) {
+      const hash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      await db('refresh_tokens').where({ token_hash: hash }).update({ revoked: true });
+    }
+    res.clearCookie('refresh_token', { path: '/api/auth/refresh' });
+    res.json({ success: true });
+  } catch (err) { next(err); }
+}
+
+module.exports = { login, me, changePassword, listAdmins, createAdmin, deleteAdmin, resetAdminPassword, updateAdminRole, updateAdminModules, refreshToken, logout };

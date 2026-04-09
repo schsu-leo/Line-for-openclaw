@@ -18,6 +18,7 @@ if (process.env.JWT_SECRET === 'your-jwt-secret-key-change-in-production') {
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const path = require('path');
 const fs = require('fs');
 const logger = require('./config/logger');
@@ -43,12 +44,12 @@ app.use(cors({
     // Allow no-origin (curl, Postman, same-origin)
     if (!origin) return callback(null, true);
 
-    // Exact matches: env-configured origins + common dev ports
+    // T5: localhost 只在開發環境允許
     const allowed = [
       process.env.CLIENT_URL,
-      'http://localhost:5173',
-      'http://localhost:5174',
-      'http://localhost:5175',
+      ...(process.env.NODE_ENV !== 'production'
+        ? ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175']
+        : []),
     ].filter(Boolean);
     if (allowed.includes(origin)) return callback(null, true);
 
@@ -78,6 +79,9 @@ app.use(cors({
   credentials: true,
 }));
 
+// T4: Cookie parser（refresh token 使用 HttpOnly cookie）
+app.use(cookieParser());
+
 // Body parsing (webhook route handles its own raw body)
 app.use((req, res, next) => {
   if (req.path === '/api/webhook/line') {
@@ -90,9 +94,23 @@ app.use((req, res, next) => {
 // Static files for media uploads
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Rate limiting for auth endpoints
+// T6: 全局 API Rate Limiting
+const rateLimit = require('express-rate-limit');
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: '請求過於頻繁，請稍後再試' },
+});
+app.use('/api/', apiLimiter);
+
+// Rate limiting for auth endpoints (更嚴格)
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth/register', registerLimiter);
+
+// Health check
+app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
 // Routes
 app.use('/api/setup', require('./routes/setup.routes'));
@@ -108,6 +126,7 @@ app.use('/api/line-groups', require('./routes/lineGroups.routes'));
 app.use('/api/broadcast', require('./routes/broadcast.routes'));
 app.use('/api/shipments', require('./routes/shipments.routes'));
 app.use('/api/credit-notes', require('./routes/creditNotes.routes'));
+app.use('/api/db-query', require('./routes/dbQuery.routes'));
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));

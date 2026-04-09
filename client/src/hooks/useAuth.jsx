@@ -30,7 +30,9 @@ export function AuthProvider({ children }) {
     setUser((prev) => prev ? { ...prev, requiresPasswordChange: false } : prev);
   };
 
-  const logout = () => {
+  // T4: 登出時撤銷 refresh token
+  const logout = async () => {
+    try { await api.post('/auth/logout'); } catch {}
     localStorage.removeItem('token');
     setUser(null);
   };

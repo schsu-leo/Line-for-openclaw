@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
 
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [form, setForm] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
 
@@ -14,7 +15,12 @@ export default function Login() {
     setLoading(true);
     try {
       await login(form.email, form.password);
-      navigate('/dashboard');
+      const redirect = searchParams.get('redirect');
+      if (redirect && (redirect.startsWith('/m/') || redirect.startsWith('/invoice'))) {
+        navigate(redirect);
+      } else {
+        navigate('/');
+      }
     } catch (err) {
       const msg = err.response?.status === 429
         ? '登入嘗試過多，請 15 分鐘後再試'
@@ -41,7 +47,7 @@ export default function Login() {
               type="email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               placeholder="admin@example.com"
               required
             />
@@ -52,7 +58,7 @@ export default function Login() {
               type="password"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               placeholder="••••••••"
               required
             />
@@ -60,7 +66,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-green-500 hover:bg-green-600 text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-50"
+            className="w-full bg-primary-500 hover:bg-primary-600 text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-50"
           >
             {loading ? '登入中...' : '登入'}
           </button>
@@ -70,7 +76,7 @@ export default function Login() {
           <button
             type="button"
             onClick={() => toast('請聯繫系統管理員重設密碼', { icon: 'ℹ️' })}
-            className="text-sm text-green-600 hover:text-green-700 hover:underline"
+            className="text-sm text-primary-600 hover:text-primary-700 hover:underline"
           >
             忘記密碼？
           </button>
