@@ -1,7 +1,7 @@
 // server/src/migrations/20260409_20_create_v_shipment_detail.js
 exports.up = async function (knex) {
   await knex.raw(`
-    CREATE VIEW v_shipment_detail AS
+    CREATE OR REPLACE VIEW v_shipment_detail AS
     SELECT
       s.id              AS "出貨單ID",
       s.date            AS "日期",
