@@ -3,7 +3,7 @@ version: "3.8"
 services:
   # ── LINE 智能客服 (Portal frontend + CS backend) ────────────────
   app:
-    build: .
+    image: ghcr.io/schsu-leo/shang-ren-automation/app:latest
     restart: unless-stopped
     env_file:
       - server/.env
@@ -156,9 +156,7 @@ services:
 
   # ── 考勤系統 API (Express + Prisma) ─────────────────────────────
   attendance:
-    build:
-      context: ../attendance-system/server
-      dockerfile: Dockerfile
+    image: ghcr.io/schsu-leo/shang-ren-automation/attendance:latest
     restart: unless-stopped
     environment:
       - PORT=3001
@@ -192,11 +190,7 @@ services:
 
   # ── 考勤系統前端 (nginx 靜態) ───────────────────────────────────
   att-client:
-    build:
-      context: ../attendance-system/client
-      dockerfile: Dockerfile
-      args:
-        VITE_LIFF_ID: "2009561373-EUy47Hcq"
+    image: ghcr.io/schsu-leo/shang-ren-automation/att-client:latest
     restart: unless-stopped
     networks:
       - internal
