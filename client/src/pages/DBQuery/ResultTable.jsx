@@ -30,6 +30,7 @@ export default function ResultTable({ result, queryMode, queryPayload }) {
 
   useEffect(() => {
     setExpanded(false);
+    setPage(1);
   }, [rows]);
 
   // Determine which columns to display
@@ -86,6 +87,7 @@ export default function ResultTable({ result, queryMode, queryPayload }) {
           row={rows[0]}
           onExpand={() => setExpanded(true)}
           onExport={handleExport}
+          exporting={exporting}
         />
       )}
 

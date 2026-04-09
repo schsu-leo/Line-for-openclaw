@@ -6,7 +6,7 @@ function formatNumber(value) {
   return num.toLocaleString('zh-TW', { maximumFractionDigits: 2 });
 }
 
-export default function AnswerCard({ row, onExpand, onExport }) {
+export default function AnswerCard({ row, onExpand, onExport, exporting }) {
   const entries = Object.entries(row).filter(([, v]) => v !== null && v !== undefined);
 
   return (
@@ -34,13 +34,15 @@ export default function AnswerCard({ row, onExpand, onExport }) {
           </button>
           <button
             onClick={() => onExport('csv')}
-            className="px-3 py-1.5 text-xs border border-green-200 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors"
+            disabled={exporting}
+            className="px-3 py-1.5 text-xs border border-green-200 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors disabled:opacity-50"
           >
             ⬇ CSV
           </button>
           <button
             onClick={() => onExport('xlsx')}
-            className="px-3 py-1.5 text-xs border border-green-200 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors"
+            disabled={exporting}
+            className="px-3 py-1.5 text-xs border border-green-200 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors disabled:opacity-50"
           >
             ⬇ XLSX
           </button>
