@@ -2,20 +2,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 import AnswerCard from './AnswerCard';
+import { detectDisplayMode } from './displayUtils.js';
 
 const PAGE_SIZE = 20;
-
-function detectDisplayMode(rows, queryMode) {
-  if (queryMode !== 'llm') return 'table';
-  if (!rows.length) return 'table';
-  if (rows.length === 1) {
-    const values = Object.values(rows[0]).filter((v) => v !== null && v !== undefined);
-    const allNumeric = values.length > 0 && values.every((v) => !isNaN(Number(v)));
-    if (allNumeric) return 'answer-card';
-  }
-  if (rows.length < 20) return 'compact';
-  return 'large';
-}
 
 export default function ResultTable({ result, queryMode, queryPayload }) {
   const [page, setPage] = useState(1);

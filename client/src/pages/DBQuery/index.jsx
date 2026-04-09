@@ -6,20 +6,10 @@ import VisualFilter from './VisualFilter';
 import LLMQuery from './LLMQuery';
 import ResultTable from './ResultTable';
 import AdminSettings from './AdminSettings';
+import { getThisMonthRange } from './dateUtils.js';
 
 const HISTORY_KEY = 'db_query_history';
 const MAX_HISTORY = 10;
-
-function getThisMonthRange() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const firstDay = `${year}-${month}-01`;
-  const lastDay = new Date(year, now.getMonth() + 1, 0)
-    .toISOString()
-    .slice(0, 10);
-  return { firstDay, lastDay };
-}
 
 function loadHistory() {
   try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
