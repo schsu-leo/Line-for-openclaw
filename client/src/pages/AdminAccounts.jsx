@@ -3,12 +3,31 @@ import { useAuth } from '../hooks/useAuth';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
-const ROLE_LABELS = { admin: '管理員', '正職': '正職', PT: 'PT' };
+const ROLE_LABELS = { admin: '管理員', manager: '部門主管', staff: '同仁' };
 const ROLE_COLORS = {
   admin: 'bg-purple-100 text-purple-700',
-  '正職': 'bg-blue-100 text-blue-700',
-  PT: 'bg-gray-100 text-gray-600',
+  manager: 'bg-orange-100 text-orange-700',
+  staff: 'bg-blue-100 text-blue-700',
 };
+function primaryRole(roles = []) {
+  if (roles.includes('admin')) return 'admin';
+  if (roles.includes('manager')) return 'manager';
+  return 'staff';
+}
+
+const ALL_MODULES = [
+  { id: 'cs', label: 'LINE 客服' },
+  { id: 'attendance', label: '考勤管理' },
+  { id: 'invoice', label: '月結請款' },
+  { id: 'db-query', label: '資料查詢' },
+];
+
+const DEPT_ORDER = ['管理部', '行政部', '會計部', '業務部', '採購部', '營運部', '物流部', '倉儲部'];
+function deptSort(a, b) {
+  const ai = DEPT_ORDER.indexOf(a.department);
+  const bi = DEPT_ORDER.indexOf(b.department);
+  return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+}
 
 export default function AdminAccounts() {
   const { user: currentUser } = useAuth();
@@ -16,7 +35,8 @@ export default function AdminAccounts() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [resetTarget, setResetTarget] = useState(null);
-  const [createForm, setCreateForm] = useState({ email: '', password: '', name: '', role: 'admin' });
+  const [modulesTarget, setModulesTarget] = useState(null); // { id, name, modules[] }
+  const [createForm, setCreateForm] = useState({ email: '', password: '', name: '', role: 'staff', department: '' });
   const [resetPassword, setResetPassword] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -42,7 +62,7 @@ export default function AdminAccounts() {
       await api.post('/auth/admins', createForm);
       toast.success('帳號建立成功，該帳號首次登入需修改密碼');
       setShowCreate(false);
-      setCreateForm({ email: '', password: '', name: '', role: 'admin' });
+      setCreateForm({ email: '', password: '', name: '', role: 'staff', department: '' });
       fetchAccounts();
     } catch (err) {
       toast.error(err.response?.data?.error || '建立失敗');
@@ -78,10 +98,24 @@ export default function AdminAccounts() {
     }
   };
 
+  const handleModulesSave = async () => {
+    setSaving(true);
+    try {
+      await api.patch(`/auth/admins/${modulesTarget.id}/modules`, { modules: modulesTarget.modules });
+      setAccounts((prev) => prev.map((a) => a.id === modulesTarget.id ? { ...a, modules: modulesTarget.modules } : a));
+      toast.success('模組權限已更新');
+      setModulesTarget(null);
+    } catch (err) {
+      toast.error(err.response?.data?.error || '更新失敗');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleRoleChange = async (account, newRole) => {
     try {
       await api.patch(`/auth/admins/${account.id}/role`, { role: newRole });
-      setAccounts((prev) => prev.map((a) => a.id === account.id ? { ...a, role: newRole } : a));
+      setAccounts((prev) => prev.map((a) => a.id === account.id ? { ...a, roles: [newRole] } : a));
       toast.success('角色已更新');
     } catch (err) {
       toast.error(err.response?.data?.error || '更新失敗');
@@ -89,7 +123,7 @@ export default function AdminAccounts() {
   };
 
   return (
-    <div className="p-6 max-w-3xl">
+    <div className="p-6 max-w-5xl">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold text-gray-800">帳號管理</h1>
@@ -114,6 +148,7 @@ export default function AdminAccounts() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">部門</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">名稱</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Email</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">角色</th>
@@ -122,9 +157,10 @@ export default function AdminAccounts() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {accounts.map((account) => (
+              {[...accounts].sort(deptSort).map((account) => (
                 <tr key={account.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-800">
+                  <td className="px-4 py-3 text-gray-600">{account.department || '—'}</td>
+                  <td className="px-4 py-3 font-medium text-gray-800 whitespace-nowrap">
                     {account.name || '—'}
                     {account.id === currentUser?.id && (
                       <span className="ml-2 text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">你</span>
@@ -133,25 +169,33 @@ export default function AdminAccounts() {
                   <td className="px-4 py-3 text-gray-600">{account.email}</td>
                   <td className="px-4 py-3">
                     {account.id === currentUser?.id ? (
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_COLORS[account.role] || 'bg-gray-100 text-gray-600'}`}>
-                        {ROLE_LABELS[account.role] || account.role}
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_COLORS[primaryRole(account.roles)] || 'bg-gray-100 text-gray-600'}`}>
+                        {ROLE_LABELS[primaryRole(account.roles)] || primaryRole(account.roles)}
                       </span>
                     ) : (
                       <select
-                        value={account.role || 'admin'}
+                        value={primaryRole(account.roles) || 'staff'}
                         onChange={(e) => handleRoleChange(account, e.target.value)}
                         className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-400"
                       >
                         <option value="admin">管理員</option>
-                        <option value="正職">正職</option>
-                        <option value="PT">PT</option>
+                        <option value="manager">部門主管</option>
+                        <option value="staff">同仁</option>
                       </select>
                     )}
                   </td>
                   <td className="px-4 py-3 text-gray-400">
                     {new Date(account.created_at).toLocaleDateString('zh-TW')}
                   </td>
-                  <td className="px-4 py-3 text-right space-x-2">
+                  <td className="px-4 py-3 text-right space-x-2 whitespace-nowrap">
+                    {account.id !== currentUser?.id && (
+                      <button
+                        onClick={() => setModulesTarget({ id: account.id, name: account.name || account.email, modules: account.modules || [] })}
+                        className="text-xs text-green-600 hover:text-green-800"
+                      >
+                        模組
+                      </button>
+                    )}
                     <button
                       onClick={() => { setResetTarget(account); setResetPassword(''); }}
                       className="text-xs text-blue-600 hover:text-blue-800"
@@ -213,6 +257,16 @@ export default function AdminAccounts() {
                 />
               </div>
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">部門</label>
+                <input
+                  type="text"
+                  value={createForm.department}
+                  onChange={(e) => setCreateForm({ ...createForm, department: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="例：管理部、業務部（選填）"
+                />
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">角色</label>
                 <select
                   value={createForm.role}
@@ -220,8 +274,8 @@ export default function AdminAccounts() {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
                   <option value="admin">管理員</option>
-                  <option value="正職">正職</option>
-                  <option value="PT">PT</option>
+                  <option value="manager">部門主管</option>
+                  <option value="staff">同仁</option>
                 </select>
               </div>
               <p className="text-xs text-gray-400">新帳號首次登入時將被要求修改密碼。</p>
@@ -242,6 +296,53 @@ export default function AdminAccounts() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 模組權限 Modal */}
+      {modulesTarget && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-sm mx-4">
+            <h2 className="text-lg font-semibold mb-1">模組權限</h2>
+            <p className="text-sm text-gray-500 mb-4">{modulesTarget.name}</p>
+            <div className="space-y-2 mb-5">
+              {ALL_MODULES.map((mod) => {
+                const checked = modulesTarget.modules.includes(mod.id);
+                return (
+                  <label key={mod.id} className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-gray-50">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        const next = e.target.checked
+                          ? [...modulesTarget.modules, mod.id]
+                          : modulesTarget.modules.filter((m) => m !== mod.id);
+                        setModulesTarget({ ...modulesTarget, modules: next });
+                      }}
+                      className="w-4 h-4 accent-green-500"
+                    />
+                    <span className="text-sm text-gray-700">{mod.label}</span>
+                    <span className="text-xs text-gray-400 font-mono ml-auto">{mod.id}</span>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setModulesTarget(null)}
+                className="flex-1 border border-gray-300 rounded-lg py-2 text-sm hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleModulesSave}
+                disabled={saving}
+                className="flex-1 bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white rounded-lg py-2 text-sm font-medium"
+              >
+                {saving ? '儲存中...' : '儲存'}
+              </button>
+            </div>
           </div>
         </div>
       )}

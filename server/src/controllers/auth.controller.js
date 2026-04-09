@@ -137,11 +137,11 @@ async function listAdmins(req, res, next) {
   } catch (err) { next(err); }
 }
 
-const VALID_ROLES = ['admin', 'manager', 'employee'];
+const VALID_ROLES = ['admin', 'manager', 'staff'];
 
 async function createAdmin(req, res, next) {
   try {
-    const { email, password, name, role = 'employee', modules } = req.body;
+    const { email, password, name, role = 'staff', modules } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email 和密碼為必填' });
     if (password.length < 8) return res.status(400).json({ error: '密碼至少需要 8 個字元' });
     if (!VALID_ROLES.includes(role)) return res.status(400).json({ error: '無效的角色' });
@@ -256,4 +256,13 @@ async function logout(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { login, me, changePassword, listAdmins, createAdmin, deleteAdmin, resetAdminPassword, updateAdminRole, updateAdminModules, refreshToken, logout };
+async function getDepartments(req, res, next) {
+  try {
+    const rows = await db('departments')
+      .select('name')
+      .orderBy('name');
+    res.json(rows.map(r => r.name));
+  } catch (err) { next(err); }
+}
+
+module.exports = { login, me, changePassword, listAdmins, createAdmin, deleteAdmin, resetAdminPassword, updateAdminRole, updateAdminModules, refreshToken, logout, getDepartments };
